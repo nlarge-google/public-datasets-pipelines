@@ -146,7 +146,7 @@ def gz_decompress(infile: str, tofile: str, delete_zipfile: bool = False) -> Non
         os.remove(infile)
 
 
-def explode_json_column(
+def explode_json_column_dataframe(
     df: pd.DataFrame,
     id_col: str,
     json_col: str,
@@ -158,9 +158,17 @@ def explode_json_column(
     df_data_exploded = df_data.explode(json_col)
     df_data_return = pd.concat([df_data_exploded[id_col].reset_index(drop=True), pd.json_normalize(df_data_exploded[json_col])], axis=1)
     if join_datasets:
-        pd.concat([df_data_return, df, ])
+        df_data_return = pd.merge(df_data, df_data_return, how='outer', on=id_col)
+    return df_data_return
 
 
+def load_json_file_into_dataframe(
+    json_filepath: str
+) -> pd.DataFrame:
+    with open(json_filepath) as json_file:
+        data = json.load(json_file)
+        df = pd.json_normalize(data)
+        return df
 
 
 def process_source_file(
@@ -174,8 +182,14 @@ def process_source_file(
     source_url: str,
 ) -> None:
     logging.info(f"Opening source file {source_file}")
-    json_file_obj = json.load(open(source_file))
-    df = pd.json_normalize(json_file_obj)
+    df_source = load_json_file_into_dataframe(json_filepath=source_file)
+    df = explode_json_column_dataframe(
+            df = df_source,
+            id_col = id_col,
+            json_col = json_col,
+            ordinal = 0,
+            join_datasets = True
+        )
 
 
 
