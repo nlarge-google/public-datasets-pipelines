@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import pathlib
+import shutil
 import typing
 from urllib.parse import urlparse
 
@@ -31,75 +32,68 @@ from google.cloud import bigquery, storage
 def main(
     source_url: str,
     pipeline_name: str,
+    source_file_zipfile: pathlib.Path,
+    delete_zipfile: bool,
     source_file: pathlib.Path,
     target_file: pathlib.Path,
-    project_id: str,
-    dataset_id: str,
-    table_id: str,
-    schema_path: str,
-    source_file_header_rows: str,
-    source_file_footer_rows: str,
     chunksize: str,
     target_gcs_bucket: str,
     target_gcs_path: str,
-    input_headers: str,
-    data_dtypes: dict,
-    datetime_list: typing.List[str],
-    null_string_list: typing.List[str],
+    project_id: str,
+    dataset_id: str,
+    destination_table: str,
+    schema_filepath: str,
+    normalize_fields: typing.List[dict]
 ) -> None:
 
     logging.info(f"{pipeline_name} process started")
     pathlib.Path("./files").mkdir(parents=True, exist_ok=True)
     execute_pipeline(
         source_url=source_url,
+        source_file_zipfile=source_file_zipfile,
+        delete_zipfile=(delete_zipfile.title() == "True"),
         source_file=source_file,
         target_file=target_file,
-        project_id=project_id,
-        dataset_id=dataset_id,
-        destination_table=table_id,
-        schema_path=schema_path,
         chunksize=chunksize,
         target_gcs_bucket=target_gcs_bucket,
         target_gcs_path=target_gcs_path,
-        input_headers=input_headers,
-        data_dtypes=data_dtypes,
-        datetime_list=datetime_list,
-        null_string_list=null_string_list,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        destination_table=destination_table,
+        schema_filepath=schema_filepath,
+        normalize_fields=normalize_fields
     )
     logging.info(f"{pipeline_name} process completed")
 
 
 def execute_pipeline(
     source_url: str,
+    source_file_zipfile: pathlib.Path,
+    delete_zipfile: bool,
     source_file: pathlib.Path,
     target_file: pathlib.Path,
-    project_id: str,
-    dataset_id: str,
-    destination_table: str,
-    schema_path: str,
     chunksize: str,
     target_gcs_bucket: str,
     target_gcs_path: str,
-    input_headers: str,
-    data_dtypes: dict,
-    datetime_list: typing.List[str],
-    null_string_list: typing.List[str],
+    project_id: str,
+    dataset_id: str,
+    destination_table: str,
+    schema_filepath: str,
+    normalize_fields: typing.List[dict]
 ) -> None:
-    source_file_path = os.path.split(source_file)[0]
-    source_url_file = os.path.basename(urlparse(source_url).path)
-    source_file_zipfile = f"{source_file_path}/{source_url_file}"
-    download_file(source_url, source_file_zipfile)
-    gz_decompress(infile=source_file_zipfile, tofile=source_file, delete_zipfile=False)
+    # download_file(source_url, source_file_zipfile)
+    extract_path = os.path.split(source_file_zipfile)[0]
+    unzip_path = str.replace(os.path.split(source_file_zipfile)[1], ".tar.gz", "")
+    # shutil.unpack_archive(filename=source_file_zipfile, extract_dir=f"{extract_path}/{unzip_path}")
+    if delete_zipfile:
+        os.remove(source_file_zipfile)
     process_source_file(
         source_file=source_file,
         target_file=target_file,
         chunksize=chunksize,
-        input_headers=input_headers,
-        data_dtypes=data_dtypes,
-        datetime_list=datetime_list,
-        null_string_list=null_string_list,
-        source_url=source_url,
+        normalize_fields=normalize_fields
     )
+    import pdb; pdb.set_trace()
     # if os.path.exists(target_file):
     #     upload_file_to_gcs(
     #         file_path=target_file,
@@ -137,62 +131,27 @@ def execute_pipeline(
     #     )
 
 
-def gz_decompress(infile: str, tofile: str, delete_zipfile: bool = False) -> None:
-    logging.info(f"Decompressing {infile}")
-    with open(infile, "rb") as inf, open(tofile, "w", encoding="utf8") as tof:
-        decom_str = gzip.decompress(inf.read()).decode("utf-8")
-        tof.write(decom_str)
-    if delete_zipfile:
-        os.remove(infile)
-
-
-def explode_json_column_dataframe(
-    df: pd.DataFrame,
-    id_col: str,
-    json_col: str,
-    ordinal: int = 0,
-    join_datasets: bool = False
-) -> pd.DataFrame:
-    logging.info(f"Extracting JSON column {json_col} using id column {id_col}")
-    df_data = df[json_col].apply(lambda x: pd.json_normalize(x, sep="_"))[ordinal][:]
-    df_data_exploded = df_data.explode(json_col)
-    df_data_return = pd.concat([df_data_exploded[id_col].reset_index(drop=True), pd.json_normalize(df_data_exploded[json_col])], axis=1)
-    if join_datasets:
-        df_data_return = pd.merge(df_data, df_data_return, how='outer', on=id_col)
-    return df_data_return
-
-
-def load_json_file_into_dataframe(
-    json_filepath: str
-) -> pd.DataFrame:
-    with open(json_filepath) as json_file:
-        data = json.load(json_file)
-        df = pd.json_normalize(data)
-        return df
-
-
 def process_source_file(
     source_file: str,
     target_file: str,
     chunksize: str,
-    input_headers: str,
-    data_dtypes: dict,
-    datetime_list: typing.List[str],
-    null_string_list: typing.List[str],
-    source_url: str,
+    normalize_fields: typing.List[dict]
 ) -> None:
-    logging.info(f"Opening source file {source_file}")
-    df_source = load_json_file_into_dataframe(json_filepath=source_file)
-    df = explode_json_column_dataframe(
-            df = df_source,
-            id_col = id_col,
-            json_col = json_col,
-            ordinal = 0,
-            join_datasets = True
-        )
+    logging.info(f"Processing source file {source_file}")
+    for field_metadata in normalize_fields_root:
 
-
-
+    for field_metadata in normalize_fields:
+        if field_metadata["root_data"] == "True":
+            df = field_metadata["json_field"].apply(lambda x: pd.json_normalize(x, sep="_"))[ordinal][:]
+        import pdb; pdb.set_trace()
+        # df_source = load_json_file_into_dataframe(json_filepath=source_file)
+        # df = explode_json_column_dataframe(
+        #         df = df_source,
+        #         id_col = id_col,
+        #         json_col = json_col,
+        #         ordinal = 0,
+        #         join_datasets = True
+        #     )
     # csv.field_size_limit(512 << 10)
     # csv.register_dialect("TabDialect", quotechar='"', delimiter="\t", strict=True)
     # with open(
@@ -229,6 +188,40 @@ def process_source_file(
     #             source_file,
     #             source_url,
     #         )
+
+
+def gz_decompress(infile: str, tofile: str, delete_zipfile: bool = False) -> None:
+    logging.info(f"Decompressing {infile}")
+    with open(infile, "rb") as inf, open(tofile, "w", encoding="utf8") as tof:
+        decom_str = gzip.decompress(inf.read()).decode("utf-8")
+        tof.write(decom_str)
+    if delete_zipfile:
+        os.remove(infile)
+
+
+def explode_json_column_dataframe(
+    df: pd.DataFrame,
+    id_col: str,
+    json_col: str,
+    ordinal: int = 0,
+    join_datasets: bool = False
+) -> pd.DataFrame:
+    logging.info(f"Extracting JSON column {json_col} using id column {id_col}")
+    df_data = df[json_col].apply(lambda x: pd.json_normalize(x, sep="_"))[ordinal][:]
+    df_data_exploded = df_data.explode(json_col)
+    df_data_return = pd.concat([df_data_exploded[id_col].reset_index(drop=True), pd.json_normalize(df_data_exploded[json_col])], axis=1)
+    if join_datasets:
+        df_data_return = pd.merge(df_data, df_data_return, how='outer', on=id_col)
+    return df_data_return
+
+
+def load_json_file_into_dataframe(
+    json_filepath: str
+) -> pd.DataFrame:
+    with open(json_filepath) as json_file:
+        data = json.load(json_file)
+        df = pd.json_normalize(data)
+        return df
 
 
 def process_dataframe_chunk(
@@ -469,21 +462,18 @@ if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
 
     main(
-        source_url=os.environ["SOURCE_URL"],
-        pipeline_name=os.environ["PIPELINE_NAME"],
-        source_file=json.loads(os.environ["SOURCE_FILE"]),
-        target_file=pathlib.Path(os.environ["TARGET_FILE"]).expanduser(),
-        chunksize=os.environ["CHUNKSIZE"],
-        target_gcs_bucket=os.environ["TARGET_GCS_BUCKET"],
-        target_gcs_path=os.environ["TARGET_GCS_PATH"],
-        project_id=os.environ["PROJECT_ID"],
-        dataset_id=os.environ["DATASET_ID"],
-        table_id=os.environ["TABLE_ID"],
-        schema_path=os.environ["SCHEMA_PATH"],
-        source_file_header_rows=os.environ["SOURCE_FILE_HEADER_ROWS"],
-        source_file_footer_rows=os.environ["SOURCE_FILE_FOOTER_ROWS"],
-        input_headers=json.loads(os.environ["INPUT_CSV_HEADERS"]),
-        data_dtypes=json.loads(os.environ["DATA_DTYPES"]),
-        datetime_list=json.loads(os.environ["DATETIME_LIST"]),
-        null_string_list=json.loads(os.environ["NULL_STRING_LIST"]),
+        source_url=os.environ.get("SOURCE_URL", ""),
+        pipeline_name=os.environ.get("PIPELINE_NAME", ""),
+        source_file_zipfile=pathlib.Path(os.environ.get("SOURCE_FILE_ZIPFILE", "")).expanduser(),
+        delete_zipfile=os.environ.get("CHUNKSIZE", "False"),
+        source_file=pathlib.Path(os.environ.get("SOURCE_FILE", "")).expanduser(),
+        target_file=pathlib.Path(os.environ.get("TARGET_FILE", "")).expanduser(),
+        chunksize=os.environ.get("CHUNKSIZE", "1000000"),
+        target_gcs_bucket=os.environ.get("TARGET_GCS_BUCKET", ""),
+        target_gcs_path=os.environ.get("TARGET_GCS_PATH", ""),
+        project_id=os.environ.get("PROJECT_ID", ""),
+        dataset_id=os.environ.get("DATASET_ID", ""),
+        destination_table=os.environ.get("DESTINATION_TABLE", ""),
+        schema_filepath=os.environ.get("SCHEMA_FILEPATH", ""),
+        normalize_fields=json.loads(os.environ.get("NORMALIZE_FIELDS", r"[]"))
     )
