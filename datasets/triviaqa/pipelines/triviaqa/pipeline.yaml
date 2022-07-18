@@ -72,26 +72,28 @@ dag:
           SCHEMA_PATH: "data/triviaqa/schema/web-dev.schema"
           DESTINATION_TABLE: "web_dev"
           SCHEMA_FILEPATH: "data/triviaqa/schema/web-dev.schema"
-          NORMALIZE_FIELDS_ROOT: >-
-            {
-              "source_df": "web_dev",
-              "json_field": "Data",
-              "norm_ordinal": 0,
-              "dest_df": "web_dev_data"
-            }
           NORMALIZE_FIELDS: >-
             [
               {
-                "source_df": "web_dev_data",
-                "json_field": "EntityPages",
-                "norm_ordinal": 1,
-                "dest_df": "web_dev_data_entitypages"
-              },
-              {
-                "source_df": "web_dev_data",
-                "json_field": "SearchResults",
-                "norm_ordinal": 1,
-                "dest_df": "web_dev_data_searchresults"
+                "source_df": "web_dev",
+                "json_field": "Data",
+                "norm_ordinal": 0,
+                "dest_df": "web_dev_data",
+                "nested_data":
+                  [
+                    {
+                      "source_df": "web_dev_data",
+                      "json_field": "EntityPages",
+                      "norm_ordinal": 1,
+                      "dest_df": "web_dev_data_entitypages"
+                    },
+                    {
+                      "source_df": "web_dev_data",
+                      "json_field": "SearchResults",
+                      "norm_ordinal": 1,
+                      "dest_df": "web_dev_data_searchresults"
+                    }
+                  ]
               }
             ]
       resources:

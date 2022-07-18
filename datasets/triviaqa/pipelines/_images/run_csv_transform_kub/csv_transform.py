@@ -138,12 +138,13 @@ def process_source_file(
     normalize_fields: typing.List[dict]
 ) -> None:
     logging.info(f"Processing source file {source_file}")
-    for field_metadata in normalize_fields_root:
-
     for field_metadata in normalize_fields:
-        if field_metadata["root_data"] == "True":
-            df = field_metadata["json_field"].apply(lambda x: pd.json_normalize(x, sep="_"))[ordinal][:]
         import pdb; pdb.set_trace()
+
+    # for field_metadata in normalize_fields:
+    #     if field_metadata["root_data"] == "True":
+    #         df = field_metadata["json_field"].apply(lambda x: pd.json_normalize(x, sep="_"))[ordinal][:]
+    #     import pdb; pdb.set_trace()
         # df_source = load_json_file_into_dataframe(json_filepath=source_file)
         # df = explode_json_column_dataframe(
         #         df = df_source,
