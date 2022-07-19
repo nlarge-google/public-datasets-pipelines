@@ -157,6 +157,7 @@ def process_source_file(
             nested_data_id_col = nested_data['id_col']
             nested_data_norm_ordinal = nested_data['norm_ordinal']
             nested_data_dest_df = nested_data['dest_df']
+            nested_data_exclusion_fields_list = nested_data['exclusion_fields_list']
             print(f"    source_df = {nested_data_source_df}")
             print(f"    json_field = {nested_data_json_field}")
             print(f"    norm_ordinal = {nested_data_norm_ordinal}")
@@ -168,58 +169,10 @@ def process_source_file(
                     ordinal = nested_data_norm_ordinal,
                     join_datasets = True
                 )
-            df_nested_data = df_nested_data.drop(nested_data_json_field, axis=1)
-            import pdb; pdb.set_trace()
-
-
-    # for field_metadata in normalize_fields:
-    #     if field_metadata["root_data"] == "True":
-    #         df = field_metadata["json_field"].apply(lambda x: pd.json_normalize(x, sep="_"))[ordinal][:]
-    #     import pdb; pdb.set_trace()
-        # df_source = load_json_file_into_dataframe(json_filepath=source_file)
-        # df = explode_json_column_dataframe(
-        #         df = df_source,
-        #         id_col = id_col,
-        #         json_col = json_col,
-        #         ordinal = 0,
-        #         join_datasets = True
-        #     )
-    # csv.field_size_limit(512 << 10)
-    # csv.register_dialect("TabDialect", quotechar='"', delimiter="\t", strict=True)
-    # with open(
-    #     source_file,
-    # ) as reader:
-    #     data = []
-    #     chunk_number = 1
-    #     for index, line in enumerate(csv.reader(reader, "TabDialect"), 0):
-    #         data.append(line)
-    #         if index % int(chunksize) == 0 and index > 0:
-    #             process_dataframe_chunk(
-    #                 data,
-    #                 input_headers,
-    #                 data_dtypes,
-    #                 target_file,
-    #                 chunk_number,
-    #                 datetime_list,
-    #                 null_string_list,
-    #                 source_file,
-    #                 source_url,
-    #             )
-    #             data = []
-    #             chunk_number += 1
-
-    #     if data:
-    #         process_dataframe_chunk(
-    #             data,
-    #             input_headers,
-    #             data_dtypes,
-    #             target_file,
-    #             chunk_number,
-    #             datetime_list,
-    #             null_string_list,
-    #             source_file,
-    #             source_url,
-    #         )
+            for fld in nested_data_exclusion_fields_list:
+                df_nested_data = df_nested_data.drop(fld, axis=1)
+            nested_data_target_file = str.replace(str(target_file), ".txt", f"_{nested_data_dest_df}.txt")
+            save_to_new_file(df_nested_data, nested_data_target_file)
 
 
 def gz_decompress(infile: str, tofile: str, delete_zipfile: bool = False) -> None:
