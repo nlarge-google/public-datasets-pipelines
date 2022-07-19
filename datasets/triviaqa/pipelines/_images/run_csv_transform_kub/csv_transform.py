@@ -139,7 +139,38 @@ def process_source_file(
 ) -> None:
     logging.info(f"Processing source file {source_file}")
     for field_metadata in normalize_fields:
-        import pdb; pdb.set_trace()
+        print("Extracting root data...")
+        root_source_df = field_metadata['source_df']
+        root_json_field = field_metadata['json_field']
+        root_norm_ordinal = field_metadata['norm_ordinal']
+        root_dest_df = field_metadata['dest_df']
+        print(f"source_df = {root_source_df}")
+        print(f"json_field = {root_json_field}")
+        print(f"norm_ordinal = {root_norm_ordinal}")
+        print(f"dest_df = {root_dest_df}")
+        df_root = load_json_file_into_dataframe(json_filepath=source_file)
+        df_root_exploded = df_root[root_json_field].apply(lambda x: pd.json_normalize(x, sep="_"))[root_norm_ordinal][:]
+        print("Extracting nested data...")
+        for nested_data in field_metadata["nested_data"]:
+            nested_data_source_df = nested_data['source_df']
+            nested_data_json_field = nested_data['json_field']
+            nested_data_id_col = nested_data['id_col']
+            nested_data_norm_ordinal = nested_data['norm_ordinal']
+            nested_data_dest_df = nested_data['dest_df']
+            print(f"    source_df = {nested_data_source_df}")
+            print(f"    json_field = {nested_data_json_field}")
+            print(f"    norm_ordinal = {nested_data_norm_ordinal}")
+            print(f"    dest_df = {nested_data_dest_df}")
+            df_nested_data = explode_json_column_dataframe(
+                    df = df_root_exploded,
+                    id_col = nested_data_id_col,
+                    json_field = nested_data_json_field,
+                    ordinal = nested_data_norm_ordinal,
+                    join_datasets = True
+                )
+            df_nested_data = df_nested_data.drop(nested_data_json_field, axis=1)
+            import pdb; pdb.set_trace()
+
 
     # for field_metadata in normalize_fields:
     #     if field_metadata["root_data"] == "True":
@@ -203,17 +234,21 @@ def gz_decompress(infile: str, tofile: str, delete_zipfile: bool = False) -> Non
 def explode_json_column_dataframe(
     df: pd.DataFrame,
     id_col: str,
-    json_col: str,
+    json_field: str,
     ordinal: int = 0,
     join_datasets: bool = False
 ) -> pd.DataFrame:
-    logging.info(f"Extracting JSON column {json_col} using id column {id_col}")
-    df_data = df[json_col].apply(lambda x: pd.json_normalize(x, sep="_"))[ordinal][:]
-    df_data_exploded = df_data.explode(json_col)
-    df_data_return = pd.concat([df_data_exploded[id_col].reset_index(drop=True), pd.json_normalize(df_data_exploded[json_col])], axis=1)
+    logging.info(f"Extracting JSON column {json_field} using id column {id_col}")
+    df_data_fields = df[[json_field, id_col]]
+    df_data_fields_normalized = df_data_fields.explode(json_field)
+    df_data_fields_normalized_expand = pd.json_normalize(df_data_fields_normalized[json_field])
+    df_data_fields_normalized_expand_merge = pd.concat([df_data_fields_normalized_expand.reset_index(drop=True), df_data_fields_normalized.reset_index(drop=True)], axis=1)
+    df_data_fields_normalized_expand_merge = df_data_fields_normalized_expand_merge.drop([json_field], axis=1)
     if join_datasets:
-        df_data_return = pd.merge(df_data, df_data_return, how='outer', on=id_col)
-    return df_data_return
+        df_data_return = pd.merge(df, df_data_fields_normalized_expand_merge, how='outer', on=id_col)
+        return df_data_return
+    else:
+        return df_data_fields_normalized_expand_merge
 
 
 def load_json_file_into_dataframe(
