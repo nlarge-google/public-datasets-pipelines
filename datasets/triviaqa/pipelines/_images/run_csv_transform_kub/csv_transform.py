@@ -36,13 +36,11 @@ def main(
     delete_zipfile: bool,
     source_file: pathlib.Path,
     target_file: pathlib.Path,
-    chunksize: str,
     target_gcs_bucket: str,
     target_gcs_path: str,
     project_id: str,
     dataset_id: str,
-    destination_table: str,
-    schema_filepath: str,
+    schema_rootpath: str,
     normalize_fields: typing.List[dict]
 ) -> None:
 
@@ -54,13 +52,11 @@ def main(
         delete_zipfile=(delete_zipfile.title() == "True"),
         source_file=source_file,
         target_file=target_file,
-        chunksize=chunksize,
         target_gcs_bucket=target_gcs_bucket,
         target_gcs_path=target_gcs_path,
         project_id=project_id,
         dataset_id=dataset_id,
-        destination_table=destination_table,
-        schema_filepath=schema_filepath,
+        schema_rootpath=schema_rootpath,
         normalize_fields=normalize_fields
     )
     logging.info(f"{pipeline_name} process completed")
@@ -78,7 +74,7 @@ def execute_pipeline(
     project_id: str,
     dataset_id: str,
     destination_table: str,
-    schema_filepath: str,
+    schema_rootpath: str,
     normalize_fields: typing.List[dict]
 ) -> None:
     # download_file(source_url, source_file_zipfile)
@@ -90,54 +86,53 @@ def execute_pipeline(
     process_source_file(
         source_file=source_file,
         target_file=target_file,
-        chunksize=chunksize,
+        source_url=source_url,
+        target_gcs_bucket=target_gcs_bucket,
+        target_gcs_path=target_gcs_path,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_id=destination_table,
         normalize_fields=normalize_fields
     )
     import pdb; pdb.set_trace()
-    # if os.path.exists(target_file):
-    #     upload_file_to_gcs(
-    #         file_path=target_file,
-    #         target_gcs_bucket=target_gcs_bucket,
-    #         target_gcs_path=target_gcs_path,
-    #     )
-    #     table_exists = create_dest_table(
-    #         project_id=project_id,
-    #         dataset_id=dataset_id,
-    #         table_id=destination_table,
-    #         schema_filepath=schema_path,
-    #         bucket_name=target_gcs_bucket,
-    #     )
-    #     if table_exists:
-    #         delete_source_file_data_from_bq(
-    #             project_id=project_id,
-    #             dataset_id=dataset_id,
-    #             table_id=destination_table,
-    #             source_url=source_url,
-    #         )
-    #         load_data_to_bq(
-    #             project_id=project_id,
-    #             dataset_id=dataset_id,
-    #             table_id=destination_table,
-    #             file_path=target_file,
-    #             truncate_table=False,
-    #             field_delimiter="|",
-    #         )
-    #     else:
-    #         error_msg = f"Error: Data was not loaded because the destination table {project_id}.{dataset_id}.{destination_table} does not exist and/or could not be created."
-    #         raise ValueError(error_msg)
-    # else:
-    #     logging.info(
-    #         f"Informational: The data file {target_file} was not generated because no data file was available.  Continuing."
-    #     )
 
 
 def process_source_file(
     source_file: str,
     target_file: str,
-    chunksize: str,
+    source_url: str,
+    target_gcs_bucket: str,
+    target_gcs_path: str,
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
     normalize_fields: typing.List[dict]
 ) -> None:
     logging.info(f"Processing source file {source_file}")
+    extract_data(
+        source_file=source_file,
+        target_file=target_file,
+        source_url=source_url,
+        target_gcs_bucket=target_gcs_bucket,
+        target_gcs_path=target_gcs_path,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_id=table_id,
+        normalize_fields=normalize_fields
+    )
+
+
+def extract_data(
+    source_file: str,
+    target_file: str,
+    source_url: str,
+    target_gcs_bucket: str,
+    target_gcs_path: str,
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+    normalize_fields: typing.List[dict]
+) -> None:
     for field_metadata in normalize_fields:
         print("Extracting root data...")
         root_source_df = field_metadata['source_df']
@@ -171,8 +166,74 @@ def process_source_file(
                 )
             for fld in nested_data_exclusion_fields_list:
                 df_nested_data = df_nested_data.drop(fld, axis=1)
+            add_metadata_columns(
+                df=df_nested_data,
+                source_file=source_file,
+                source_url=source_url
+            )
             nested_data_target_file = str.replace(str(target_file), ".txt", f"_{nested_data_dest_df}.txt")
-            save_to_new_file(df_nested_data, nested_data_target_file)
+            save_load_data(
+                df=df_nested_data,
+                target_file=nested_data_target_file,
+                target_gcs_bucket=target_gcs_bucket,
+                target_gcs_path=target_gcs_path,
+                project_id=project_id,
+                dataset_id=dataset_id,
+                table_id=table_id,
+                source_url=source_url
+            )
+
+
+def save_load_data(
+    df: pd.DataFrame,
+    target_file: str,
+    target_gcs_bucket: str,
+    target_gcs_path: str,
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+    source_url: str
+) -> None:
+    save_to_new_file(
+        df=df,
+        target_file=target_file,
+        sep="|"
+    )
+    if os.path.exists(target_file):
+        upload_file_to_gcs(
+            file_path=target_file,
+            target_gcs_bucket=target_gcs_bucket,
+            target_gcs_path=target_gcs_path,
+        )
+        table_exists = create_dest_table(
+            project_id=project_id,
+            dataset_id=dataset_id,
+            table_id=table_id,
+            schema_filepath=f"{schema_path}/{table_id}_schema.json",
+            bucket_name=target_gcs_bucket,
+        )
+        if table_exists:
+            delete_source_file_data_from_bq(
+                project_id=project_id,
+                dataset_id=dataset_id,
+                table_id=table_id,
+                source_url=source_url,
+            )
+            load_data_to_bq(
+                project_id=project_id,
+                dataset_id=dataset_id,
+                table_id=table_id,
+                file_path=target_file,
+                truncate_table=True,
+                field_delimiter="|",
+            )
+        else:
+            error_msg = f"Error: Data was not loaded because the destination table {project_id}.{dataset_id}.{destination_table} does not exist and/or could not be created."
+            raise ValueError(error_msg)
+    else:
+        logging.info(
+            f"Informational: The data file {target_file} was not generated because no data file was available.  Continuing."
+        )
 
 
 def gz_decompress(infile: str, tofile: str, delete_zipfile: bool = False) -> None:
@@ -457,12 +518,10 @@ if __name__ == "__main__":
         delete_zipfile=os.environ.get("CHUNKSIZE", "False"),
         source_file=pathlib.Path(os.environ.get("SOURCE_FILE", "")).expanduser(),
         target_file=pathlib.Path(os.environ.get("TARGET_FILE", "")).expanduser(),
-        chunksize=os.environ.get("CHUNKSIZE", "1000000"),
         target_gcs_bucket=os.environ.get("TARGET_GCS_BUCKET", ""),
         target_gcs_path=os.environ.get("TARGET_GCS_PATH", ""),
         project_id=os.environ.get("PROJECT_ID", ""),
         dataset_id=os.environ.get("DATASET_ID", ""),
-        destination_table=os.environ.get("DESTINATION_TABLE", ""),
-        schema_filepath=os.environ.get("SCHEMA_FILEPATH", ""),
+        schema_rootpath=os.environ.get("SCHEMA_ROOTPATH", ""),
         normalize_fields=json.loads(os.environ.get("NORMALIZE_FIELDS", r"[]"))
     )

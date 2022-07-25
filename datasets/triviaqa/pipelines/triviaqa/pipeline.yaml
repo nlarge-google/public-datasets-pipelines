@@ -63,7 +63,6 @@ dag:
           DELETE_ZIPFILE: "True"
           SOURCE_FILE: "files/triviaqa-rc/qa/web-dev.json"
           TARGET_FILE: "files/triviaqa-rc/qa/web-dev.txt"
-          CHUNKSIZE: "1000000"
           TARGET_GCS_BUCKET: "{{ var.value.composer_bucket }}"
           TARGET_GCS_PATH: "data/triviaqa/web_dev"
           PROJECT_ID: "{{ var.value.gcp_project }}"
@@ -71,7 +70,7 @@ dag:
           TABLE_ID: "web_dev"
           SCHEMA_PATH: "data/triviaqa/schema/web-dev.schema"
           DESTINATION_TABLE: "web_dev"
-          SCHEMA_FILEPATH: "data/triviaqa/schema/web-dev.schema"
+          SCHEMA_ROOTPATH: "data/triviaqa/schema"
           NORMALIZE_FIELDS: >-
             [
               {
@@ -79,7 +78,7 @@ dag:
                 "json_field": "Data",
                 "id_col": "Version",
                 "norm_ordinal": 0,
-                "dest_df": "web_dev_data",
+                "dest_table": "web_dev_data",
                 "nested_data":
                   [
                     {
@@ -87,7 +86,7 @@ dag:
                       "json_field": "EntityPages",
                       "id_col": "QuestionId",
                       "norm_ordinal": 1,
-                      "dest_df": "web_dev_data_entitypages",
+                      "dest_table": "web_dev_data_entitypages",
                       "exclusion_fields_list":
                         [
                           "EntityPages",
@@ -99,7 +98,7 @@ dag:
                       "json_field": "SearchResults",
                       "id_col": "QuestionId",
                       "norm_ordinal": 1,
-                      "dest_df": "web_dev_data_searchresults",
+                      "dest_table": "web_dev_data_searchresults",
                       "exclusion_fields_list":
                         [
                           "EntityPages",
