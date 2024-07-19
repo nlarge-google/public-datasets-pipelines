@@ -1,4 +1,4 @@
-# Copyright 2021 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,10 +38,10 @@ with DAG(
         location="us-central1-c",
         body={
             "name": "chicago-crime--crime",
-            "initial_node_count": 1,
+            "initial_node_count": 2,
             "network": "{{ var.value.vpc_network }}",
             "node_config": {
-                "machine_type": "e2-standard-2",
+                "machine_type": "e2-standard-16",
                 "oauth_scopes": [
                     "https://www.googleapis.com/auth/devstorage.read_write",
                     "https://www.googleapis.com/auth/cloud-platform",
@@ -68,6 +68,11 @@ with DAG(
             "TARGET_GCS_BUCKET": "{{ var.value.composer_bucket }}",
             "TARGET_GCS_PATH": "data/chicago_crime/crime/data_output.csv",
             "CHUNK_SIZE": "1000000",
+        },
+        resources={
+            "request_memory": "8G",
+            "request_cpu": "2",
+            "request_ephemeral_storage": "3G",
         },
     )
 

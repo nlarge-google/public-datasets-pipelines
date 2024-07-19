@@ -192,12 +192,12 @@ def rename_headers(df: pd.DataFrame) -> None:
 
 
 def convert_dt_format(dt_str: str) -> str:
-    # Old format: MM/dd/yyyy hh:mm:ss aa
-    # New format: yyyy-MM-dd HH:mm:ss
+    # Old format: MM/dd/yyyy hh:mm:ss aa (12-hour)
+    # New format: yyyy-MM-dd HH:mm:ss (24-hour)
     if not dt_str:
         return dt_str
     else:
-        return datetime.datetime.strptime(dt_str, "%m/%d/%Y %H:%M:%S %p").strftime(
+        return datetime.datetime.strptime(dt_str, "%m/%d/%Y %I:%M:%S %p").strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 
